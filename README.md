@@ -1,6 +1,6 @@
 # electron-expose
 
-Generate typed Electron IPC bridges from tiny TypeScript markers.
+Generate type-safe Electron IPC bridges from TypeScript decorators.
 
 > Work in progress. The core generator works and the example app runs, but the
 > API may still shift while the package settles.
