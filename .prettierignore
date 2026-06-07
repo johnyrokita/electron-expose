@@ -1,0 +1,8 @@
+dist
+node_modules
+pnpm-lock.yaml
+examples/calculator/.vite
+examples/calculator/out
+examples/calculator/src/generated
+test/electron-app/dist
+test/electron-app/src/generated

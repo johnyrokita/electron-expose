@@ -1,0 +1,95 @@
+{
+  "name": "electron-expose",
+  "version": "0.1.2",
+  "description": "Generate type-safe Electron IPC bridges from TypeScript decorators.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "author": "Johny Rokita <johny@rokita.org> (https://rokita.org)",
+  "repository": "https://github.com/johnyrokita/electron-expose",
+  "bin": {
+    "electron-expose": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "prepare": "simple-git-hooks",
+    "prepack": "pnpm run build",
+    "generate:fixture": "tsx src/cli.ts generate --config test/electron-app/electron-expose.config.ts",
+    "build:electron-app": "pnpm run generate:fixture && tsx test/electron-app/scripts/build.ts",
+    "start:electron-app": "pnpm run build && pnpm run build:electron-app && electron test/electron-app/dist/main.cjs",
+    "test:electron-app": "pnpm run build && pnpm run build:electron-app && tsx test/electron-app/scripts/smoke-test.ts && tsx test/electron-app/scripts/e2e-test.ts",
+    "generate:example": "pnpm --filter @electron-expose/calculator-example generate",
+    "start:example": "pnpm run build && pnpm --filter @electron-expose/calculator-example start",
+    "test:example": "pnpm run build && pnpm --filter @electron-expose/calculator-example typecheck",
+    "test": "vitest run",
+    "test:all": "pnpm run test && pnpm run test:electron-app && pnpm run test:example"
+  },
+  "keywords": [
+    "electron",
+    "ipc",
+    "codegen",
+    "preload",
+    "context-bridge",
+    "typescript",
+    "decorator"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.5.1",
+    "fast-glob": "^3.3.3",
+    "jiti": "^2.6.1",
+    "jsonc-parser": "^3.3.1",
+    "picocolors": "^1.1.1",
+    "ts-morph": "^27.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "electron": "^39.2.6",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.3",
+    "simple-git-hooks": "^2.13.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.60.1",
+    "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "electron": ">=25"
+  },
+  "peerDependenciesMeta": {
+    "electron": {
+      "optional": true
+    }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm run lint && pnpm run format:check"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

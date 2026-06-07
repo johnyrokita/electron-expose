@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Electron Expose Calculator</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="calculator" aria-label="Calculator">
+        <div class="display">
+          <span id="expression" class="expression">0</span>
+          <strong id="result" class="result">0</strong>
+        </div>
+
+        <div class="grid" id="keys">
+          <button data-action="clear" class="utility">C</button>
+          <button data-action="backspace" class="utility">⌫</button>
+          <button data-operation="divide" class="operator">÷</button>
+          <button data-operation="multiply" class="operator">×</button>
+
+          <button data-digit="7">7</button>
+          <button data-digit="8">8</button>
+          <button data-digit="9">9</button>
+          <button data-operation="subtract" class="operator">−</button>
+
+          <button data-digit="4">4</button>
+          <button data-digit="5">5</button>
+          <button data-digit="6">6</button>
+          <button data-operation="add" class="operator">+</button>
+
+          <button data-digit="1">1</button>
+          <button data-digit="2">2</button>
+          <button data-digit="3">3</button>
+          <button data-action="equals" class="equals">=</button>
+
+          <button data-digit="0" class="zero">0</button>
+          <button data-action="decimal">.</button>
+        </div>
+      </section>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
