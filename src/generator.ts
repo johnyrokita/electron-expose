@@ -34,11 +34,24 @@ type ExposedRoute = {
   kind: "function" | "method"
   className?: string
   memberName: string
-  params: Array<{ name: string; type: string }>
+  params: RouteParam[]
   returnType: string
   signatureText: string
   sourceImports: ImportDeclaration[]
   sourceLocalTypes: string[]
+}
+
+type RouteParam = {
+  name: string
+  type: string
+  optional: boolean
+}
+
+type RouteDiscovery = {
+  cwd: string
+  include: string | string[]
+  routeFiles: string[]
+  routes: ExposedRoute[]
 }
 
 const DEFAULTS = {
@@ -52,34 +65,14 @@ const DEFAULTS = {
 export async function generateElectronExpose(
   options: GenerateOptions,
 ): Promise<void> {
-  const cwd = options.cwd ?? process.cwd()
+  const discovery = await discoverRoutes(options)
+  const { cwd, routes } = discovery
   const config = await loadConfig(path.resolve(cwd, options.configPath))
   const resolved = { ...DEFAULTS, ...config }
   const outDir = path.resolve(cwd, resolved.outDir)
-  const include = resolveInclude(cwd, resolved)
-  const ignore = resolveExclude(cwd, resolved)
-  const routeFiles = await fg(include, {
-    cwd,
-    absolute: true,
-    ignore,
-    onlyFiles: true,
-  })
 
-  if (routeFiles.length === 0) {
-    throw new Error(`No source files matched ${JSON.stringify(include)}`)
-  }
+  assertRoutesFound(discovery)
 
-  const project = new Project({
-    tsConfigFilePath: findTsconfig(cwd, resolved.tsconfig),
-    skipAddingFilesFromTsConfig: true,
-    compilerOptions: {
-      experimentalDecorators: true,
-    },
-  })
-
-  const routes = routeFiles.flatMap((file) =>
-    scanSourceFile(project.addSourceFileAtPath(file)),
-  )
   validateRoutes(routes)
   await fs.mkdir(outDir, { recursive: true })
 
@@ -117,6 +110,76 @@ export async function generateElectronExpose(
   console.log(
     `Generated ${routes.length} route${routes.length === 1 ? "" : "s"} in ${path.relative(cwd, outDir)}`,
   )
+}
+
+export async function listElectronExposeRoutes(
+  options: GenerateOptions,
+): Promise<void> {
+  const discovery = await discoverRoutes(options)
+
+  if (discovery.routes.length === 0) {
+    console.log(renderNoRoutesMessage(discovery))
+    return
+  }
+
+  const rows = discovery.routes
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((route) => {
+      const source = path.relative(discovery.cwd, route.sourcePath)
+      return `${route.key}  ${renderRouteSignature(route)}  ${source}`
+    })
+
+  console.log(rows.join("\n"))
+}
+
+async function discoverRoutes(
+  options: GenerateOptions,
+): Promise<RouteDiscovery> {
+  const cwd = options.cwd ?? process.cwd()
+  const config = await loadConfig(path.resolve(cwd, options.configPath))
+  const resolved = { ...DEFAULTS, ...config }
+  const include = resolveInclude(cwd, resolved)
+  const ignore = resolveExclude(cwd, resolved)
+  const routeFiles = await fg(include, {
+    cwd,
+    absolute: true,
+    ignore,
+    onlyFiles: true,
+  })
+
+  const project = new Project({
+    tsConfigFilePath: findTsconfig(cwd, resolved.tsconfig),
+    skipAddingFilesFromTsConfig: true,
+    compilerOptions: {
+      experimentalDecorators: true,
+    },
+  })
+
+  const routes = routeFiles.flatMap((file) =>
+    scanSourceFile(project.addSourceFileAtPath(file)),
+  )
+
+  if (routes.length > 0) validateRoutes(routes)
+
+  return { cwd, include, routeFiles, routes }
+}
+
+function assertRoutesFound(discovery: RouteDiscovery): void {
+  if (discovery.routes.length > 0) return
+  throw new Error(renderNoRoutesMessage(discovery))
+}
+
+function renderNoRoutesMessage(discovery: RouteDiscovery): string {
+  const include = JSON.stringify(discovery.include)
+
+  if (discovery.routeFiles.length === 0) {
+    return `No source files matched ${include}.`
+  }
+
+  return [
+    `No exposed routes found in ${discovery.routeFiles.length} matched source file${discovery.routeFiles.length === 1 ? "" : "s"}.`,
+    `Matched ${include}, but did not find any @expose() decorators or exposed(...) functions.`,
+  ].join("\n")
 }
 
 async function loadConfig(configPath: string): Promise<ElectronExposeConfig> {
@@ -360,11 +423,30 @@ type CallableNode =
   | ArrowFunction
   | FunctionExpression
 
-function getParams(node: CallableNode): Array<{ name: string; type: string }> {
-  return node.getParameters().map((param, index) => ({
-    name: param.getName() || `arg${index}`,
-    type: param.getTypeNode()?.getText() ?? "unknown",
-  }))
+function getParams(node: CallableNode): RouteParam[] {
+  const params = node.getParameters()
+
+  return params.map((param, index) => {
+    const hasInitializer = Boolean(param.getInitializer())
+    const hasRequiredParamAfter = params
+      .slice(index + 1)
+      .some(
+        (nextParam) =>
+          !nextParam.hasQuestionToken() && !nextParam.getInitializer(),
+      )
+    const type =
+      param.getTypeNode()?.getText() ?? param.getType().getText(param)
+
+    return {
+      name: param.getName() || `arg${index}`,
+      type:
+        hasInitializer && hasRequiredParamAfter
+          ? ensureUndefinedUnion(type)
+          : type,
+      optional:
+        param.hasQuestionToken() || (hasInitializer && !hasRequiredParamAfter),
+    }
+  })
 }
 
 function getReturnType(node: CallableNode): string {
@@ -373,7 +455,7 @@ function getReturnType(node: CallableNode): string {
 
 function getSignatureText(node: CallableNode): string {
   const params = getParams(node)
-    .map((param) => `${param.name}: ${param.type}`)
+    .map((param) => renderParam(param))
     .join(", ")
   return `${params} ${getReturnType(node)}`
 }
@@ -426,7 +508,7 @@ function renderMain(
     .map((route) => {
       const args = route.params.map((param) => param.name)
       const eventArgs = args
-        .map((name, index) => `${name}: ${route.params[index].type}`)
+        .map((name, index) => renderParam({ ...route.params[index], name }))
         .join(", ")
       const params = ["_event", eventArgs].filter(Boolean).join(", ")
       const target =
@@ -581,11 +663,22 @@ function renderTypeTree(tree: TypeTree, lines: string[], depth: number): void {
       continue
     }
 
-    const params = value.params
-      .map((param) => `${param.name}: ${param.type}`)
-      .join(", ")
+    const params = value.params.map((param) => renderParam(param)).join(", ")
     lines.push(`${pad}${key}(${params}): ${ensurePromise(value.returnType)}`)
   }
+}
+
+function renderRouteSignature(route: ExposedRoute): string {
+  const params = route.params.map((param) => renderParam(param)).join(", ")
+  return `(${params}) => ${ensurePromise(route.returnType)}`
+}
+
+function renderParam(param: RouteParam): string {
+  return `${param.name}${param.optional ? "?" : ""}: ${param.type}`
+}
+
+function ensureUndefinedUnion(type: string): string {
+  return /\bundefined\b/.test(type) ? type : `${type} | undefined`
 }
 
 function renderGlobal(

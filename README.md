@@ -65,6 +65,12 @@ Generate the Electron bridge:
 electron-expose generate
 ```
 
+To inspect discovered routes without writing generated files:
+
+```sh
+electron-expose list
+```
+
 `init` is interactive. It can create config, patch detected main/preload files,
 and enable `experimentalDecorators` in `tsconfig.json`.
 

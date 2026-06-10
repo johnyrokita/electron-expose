@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { generateElectronExpose } from "./generator.js"
+import {
+  generateElectronExpose,
+  listElectronExposeRoutes,
+} from "./generator.js"
 import { initElectronExpose } from "./init.js"
 import pc from "picocolors"
 
@@ -22,6 +25,13 @@ async function main() {
     return
   }
 
+  if (command === "list") {
+    await listElectronExposeRoutes({
+      configPath: readArg("--config") ?? "electron-expose.config.ts",
+    })
+    return
+  }
+
   if (command === "init") {
     const yes = hasFlag("--yes") || hasFlag("-y")
     const write = hasFlag("--write") || yes
@@ -38,7 +48,8 @@ async function main() {
   if (!command || command === "--help" || command === "-h") {
     console.log(`${pc.bold("Usage:")}
   electron-expose init [--write] [--yes] [--root src] [--config electron-expose.config.ts]
-  electron-expose generate [--config electron-expose.config.ts]`)
+  electron-expose generate [--config electron-expose.config.ts]
+  electron-expose list [--config electron-expose.config.ts]`)
     process.exit(0)
   }
 
@@ -47,7 +58,8 @@ async function main() {
 
 ${pc.bold("Usage:")}
   electron-expose init [--write] [--yes] [--root src] [--config electron-expose.config.ts]
-  electron-expose generate [--config electron-expose.config.ts]`)
+  electron-expose generate [--config electron-expose.config.ts]
+  electron-expose list [--config electron-expose.config.ts]`)
     process.exit(command ? 1 : 0)
   }
 }
