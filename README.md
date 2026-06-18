@@ -1,9 +1,26 @@
 # electron-expose
 
-Generate type-safe Electron IPC bridges from TypeScript decorators.
+![NPM Version](https://img.shields.io/npm/v/electron-expose)
+![NPM License](https://img.shields.io/npm/l/electron-expose)
+![NPM Downloads](https://img.shields.io/npm/d18m/electron-expose)
 
-> Work in progress. The core generator works and the example app runs, but the
-> API may still shift while the package settles.
+Generate type-safe Electron IPC bridges from decorated TypeScript functions.
+
+Electron IPC usually means keeping channel names, main handlers, preload
+bridges, shared types, and renderer calls in sync. `electron-expose` generates
+that bridge from the functions you expose in code, so the renderer gets a typed
+`window.api` without the repeated wiring.
+
+One goal: make Electron IPC boring.
+
+## Why
+
+- No manual `ipcMain.handle(...)` and `ipcRenderer.invoke(...)` pairing
+- No hand-maintained renderer API types
+- No repeating the same method shape across main, preload, and renderer
+- Type-safe `window.api.*` calls generated from exposed functions
+
+Mark class methods with decorators:
 
 ```ts
 import { expose } from "electron-expose"
@@ -16,6 +33,8 @@ export class CalculatorRoutes {
 }
 ```
 
+Or expose standalone functions:
+
 ```ts
 import { exposed } from "electron-expose"
 
@@ -26,6 +45,8 @@ export const getVersion = exposed(
   },
 )
 ```
+
+Then call the generated API from the renderer:
 
 ```ts
 const answer = await window.api.math.calculate(2, 3)
@@ -43,10 +64,10 @@ pnpm add electron-expose
 Initialize the project:
 
 ```sh
-electron-expose init
+pnpm electron-expose init
 ```
 
-Then mark routes in the main process:
+Then expose functions in the main process:
 
 ```ts
 import { expose } from "electron-expose"
@@ -62,13 +83,13 @@ export class CalculatorRoutes {
 Generate the Electron bridge:
 
 ```sh
-electron-expose generate
+pnpm electron-expose generate
 ```
 
-To inspect discovered routes without writing generated files:
+To inspect discovered functions without writing generated files:
 
 ```sh
-electron-expose list
+pnpm electron-expose list
 ```
 
 `init` is interactive. It can create config, patch detected main/preload files,
@@ -77,10 +98,10 @@ and enable `experimentalDecorators` in `tsconfig.json`.
 For CI or setup scripts:
 
 ```sh
-electron-expose init --yes
+pnpm electron-expose init --yes
 ```
 
-## Wire It Up
+## Plumb It In
 
 Main process:
 
@@ -129,8 +150,9 @@ export default defineConfig({
 ```
 
 By default, `electron-expose` scans `root` for `*.ts` and `*.tsx`, then only
-generates routes for `@expose()` or `exposed(...)`. Generated/build folders,
-declaration files, and `node_modules` are ignored automatically.
+generates bridge entries for `@expose()` or `exposed(...)`.
+Generated/build folders, declaration files, and `node_modules` are ignored
+automatically.
 
 For custom layouts:
 
@@ -141,7 +163,7 @@ export default defineConfig({
 })
 ```
 
-## Route Shapes
+## Exposing Functions
 
 Class methods use decorators:
 
@@ -155,6 +177,8 @@ export class UserRoutes {
 ```
 
 Classes must be exported and currently need a zero-argument constructor.
+Decorators are used as build-time markers for `electron-expose generate`; they
+are not runtime registration logic.
 
 TypeScript does not allow decorators on top-level functions, so standalone
 functions use `exposed(...)`:
@@ -175,9 +199,3 @@ Before opening a pull request, run:
 pnpm run check
 pnpm run build
 ```
-
-See [docs/releasing.md](docs/releasing.md) for release instructions.
-
-## License
-
-MIT
