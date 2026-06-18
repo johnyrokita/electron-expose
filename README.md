@@ -1,8 +1,8 @@
 # electron-expose
 
-![NPM Version](https://img.shields.io/npm/v/electron-expose)
-![NPM License](https://img.shields.io/npm/l/electron-expose)
-![NPM Downloads](https://img.shields.io/npm/d18m/electron-expose)
+[![NPM Version](https://img.shields.io/npm/v/electron-expose)](https://www.npmjs.com/package/electron-expose)
+[![NPM License](https://img.shields.io/npm/l/electron-expose)](https://github.com/johnyrokita/electron-expose/blob/main/LICENSE)
+[![NPM Downloads](https://img.shields.io/npm/d18m/electron-expose)](https://www.npmjs.com/package/electron-expose)
 
 Generate type-safe Electron IPC bridges from decorated TypeScript functions.
 
