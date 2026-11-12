@@ -1,25 +1,12 @@
-import fs from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { initElectronExpose } from "../src/init"
+import { createProject, read } from "./helpers"
 
-async function createProject(files: Record<string, string>) {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "electron-expose-"))
-
-  await Promise.all(
-    Object.entries(files).map(async ([file, contents]) => {
-      const fullPath = path.join(cwd, file)
-      await fs.mkdir(path.dirname(fullPath), { recursive: true })
-      await fs.writeFile(fullPath, contents, "utf8")
-    }),
-  )
-
-  return cwd
-}
-
-async function read(cwd: string, file: string) {
-  return fs.readFile(path.join(cwd, file), "utf8")
+const INIT_OPTIONS = {
+  configPath: "electron-expose.config.ts",
+  write: true,
+  patchTsconfig: false,
+  interactive: false,
 }
 
 describe("initElectronExpose", () => {
@@ -94,5 +81,112 @@ describe("initElectronExpose", () => {
     await expect(read(cwd, "tsconfig.json")).resolves.toContain(
       '"experimentalDecorators": true',
     )
+  })
+
+  it("inserts after multi-line imports and leading comments", async () => {
+    const cwd = await createProject({
+      "src/main.ts": [
+        "// Main entry",
+        "import {",
+        "  app,",
+        "  BrowserWindow,",
+        '} from "electron"',
+        'import path from "node:path" // trailing',
+        "",
+        "app.whenReady()",
+        "",
+      ].join("\n"),
+      "src/preload.ts": [
+        "import {",
+        "  contextBridge,",
+        '} from "electron"',
+        "",
+      ].join("\n"),
+    })
+
+    await initElectronExpose({ cwd, ...INIT_OPTIONS })
+
+    await expect(read(cwd, "src/main.ts")).resolves.toBe(
+      [
+        "// Main entry",
+        "import {",
+        "  app,",
+        "  BrowserWindow,",
+        '} from "electron"',
+        'import path from "node:path" // trailing',
+        'import { registerElectronExposeRoutes } from "./generated/electron-expose/main"',
+        "",
+        "registerElectronExposeRoutes()",
+        "",
+        "app.whenReady()",
+        "",
+      ].join("\n"),
+    )
+    await expect(read(cwd, "src/preload.ts")).resolves.toBe(
+      [
+        "import {",
+        "  contextBridge,",
+        '} from "electron"',
+        'import { exposeElectronApi } from "./generated/electron-expose/preload"',
+        "",
+        "exposeElectronApi()",
+        "",
+      ].join("\n"),
+    )
+  })
+
+  it("inserts at the top of a file without imports, after a shebang", async () => {
+    const cwd = await createProject({
+      "src/main.ts": '#!/usr/bin/env node\nconsole.log("main")\n',
+    })
+
+    await initElectronExpose({ cwd, ...INIT_OPTIONS })
+
+    await expect(read(cwd, "src/main.ts")).resolves.toBe(
+      [
+        "#!/usr/bin/env node",
+        'import { registerElectronExposeRoutes } from "./generated/electron-expose/main"',
+        "",
+        "registerElectronExposeRoutes()",
+        "",
+        'console.log("main")',
+        "",
+      ].join("\n"),
+    )
+  })
+
+  it("detects electron-vite entries and leaves the renderer entry alone", async () => {
+    const rendererEntry = 'import { createApp } from "vue"\n'
+    const cwd = await createProject({
+      "src/main/index.ts": 'import { app } from "electron"\n',
+      "src/preload/index.ts": 'import { contextBridge } from "electron"\n',
+      "src/renderer/src/main.ts": rendererEntry,
+    })
+
+    await initElectronExpose({ cwd, ...INIT_OPTIONS })
+
+    await expect(read(cwd, "src/main/index.ts")).resolves.toContain(
+      'import { registerElectronExposeRoutes } from "../generated/electron-expose/main"',
+    )
+    await expect(read(cwd, "src/preload/index.ts")).resolves.toContain(
+      'import { exposeElectronApi } from "../generated/electron-expose/preload"',
+    )
+    await expect(read(cwd, "src/renderer/src/main.ts")).resolves.toBe(
+      rendererEntry,
+    )
+    await expect(read(cwd, "electron-expose.config.ts")).resolves.toContain(
+      'rendererGlobal: "src/renderer/src/global.d.ts"',
+    )
+  })
+
+  it("does not treat a renderer main.ts as the main process entry", async () => {
+    const rendererEntry = 'import { createApp } from "vue"\n'
+    const cwd = await createProject({
+      "src/renderer/main.ts": rendererEntry,
+    })
+
+    await initElectronExpose({ cwd, ...INIT_OPTIONS })
+
+    await expect(read(cwd, "src/renderer/main.ts")).resolves.toBe(rendererEntry)
   })
 })

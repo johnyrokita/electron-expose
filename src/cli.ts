@@ -2,9 +2,15 @@
 import {
   generateElectronExpose,
   listElectronExposeRoutes,
+  watchElectronExpose,
 } from "./generator.js"
 import { initElectronExpose } from "./init.js"
 import pc from "picocolors"
+
+const USAGE = `${pc.bold("Usage:")}
+  electron-expose init [--write] [--yes] [--root src] [--config electron-expose.config.ts]
+  electron-expose generate [--watch] [--config electron-expose.config.ts]
+  electron-expose list [--config electron-expose.config.ts]`
 
 function readArg(flag: string): string | undefined {
   const index = process.argv.indexOf(flag)
@@ -17,18 +23,21 @@ function hasFlag(flag: string): boolean {
 
 async function main() {
   const command = process.argv[2]
+  const configPath = readArg("--config")
 
   if (command === "generate") {
-    await generateElectronExpose({
-      configPath: readArg("--config") ?? "electron-expose.config.ts",
-    })
+    if (hasFlag("--watch")) {
+      await watchElectronExpose({ configPath })
+      console.log(pc.dim("Watching for changes..."))
+      return
+    }
+
+    await generateElectronExpose({ configPath })
     return
   }
 
   if (command === "list") {
-    await listElectronExposeRoutes({
-      configPath: readArg("--config") ?? "electron-expose.config.ts",
-    })
+    await listElectronExposeRoutes({ configPath })
     return
   }
 
@@ -36,7 +45,7 @@ async function main() {
     const yes = hasFlag("--yes") || hasFlag("-y")
     const write = hasFlag("--write") || yes
     await initElectronExpose({
-      configPath: readArg("--config") ?? "electron-expose.config.ts",
+      configPath: configPath ?? "electron-expose.config.ts",
       root: readArg("--root"),
       write,
       patchTsconfig: hasFlag("--tsconfig") || write,
@@ -46,22 +55,12 @@ async function main() {
   }
 
   if (!command || command === "--help" || command === "-h") {
-    console.log(`${pc.bold("Usage:")}
-  electron-expose init [--write] [--yes] [--root src] [--config electron-expose.config.ts]
-  electron-expose generate [--config electron-expose.config.ts]
-  electron-expose list [--config electron-expose.config.ts]`)
-    process.exit(0)
+    console.log(USAGE)
+    return
   }
 
-  {
-    console.log(`${pc.red("Unknown command")} "${command}"
-
-${pc.bold("Usage:")}
-  electron-expose init [--write] [--yes] [--root src] [--config electron-expose.config.ts]
-  electron-expose generate [--config electron-expose.config.ts]
-  electron-expose list [--config electron-expose.config.ts]`)
-    process.exit(command ? 1 : 0)
-  }
+  console.error(`${pc.red("Unknown command")} "${command}"\n\n${USAGE}`)
+  process.exit(1)
 }
 
 main().catch((error: unknown) => {

@@ -12,6 +12,7 @@ import {
 } from "@clack/prompts"
 import { applyEdits, modify } from "jsonc-parser"
 import pc from "picocolors"
+import { ts } from "ts-morph"
 
 type InitOptions = {
   configPath: string
@@ -35,19 +36,25 @@ type TaskReporter = {
   stop(message: string): void
 }
 
+// Known entry locations, checked in order. The `index.ts` entries cover the
+// electron-vite and vite-plugin-electron layouts.
 const MAIN_CANDIDATES = [
   "src/main.ts",
   "src/main/main.ts",
+  "src/main/index.ts",
   "src/electron/main.ts",
   "electron/main.ts",
+  "electron/main/index.ts",
   "app/main.ts",
 ]
 
 const PRELOAD_CANDIDATES = [
   "src/preload.ts",
   "src/main/preload.ts",
+  "src/preload/index.ts",
   "src/electron/preload.ts",
   "electron/preload.ts",
+  "electron/preload/index.ts",
   "app/preload.ts",
 ]
 
@@ -166,9 +173,14 @@ function detectProject(cwd: string, configuredRoot?: string): Detection {
     findFirst(cwd, MAIN_CANDIDATES) ?? findByName(cwd, root, "main.ts")
   const preload =
     findFirst(cwd, PRELOAD_CANDIDATES) ?? findByName(cwd, root, "preload.ts")
-  const rendererGlobal = fsSync.existsSync(path.join(cwd, root, "renderer"))
-    ? path.join(root, "renderer/global.d.ts")
-    : path.join(root, "global.d.ts")
+  // The deepest existing renderer source directory, so the declaration lands
+  // where the renderer's tsconfig already looks (electron-vite uses
+  // `renderer/src`).
+  const rendererDir =
+    ["renderer/src", "renderer"].find((dir) =>
+      fsSync.existsSync(path.join(cwd, root, dir)),
+    ) ?? ""
+  const rendererGlobal = path.join(root, rendererDir, "global.d.ts")
 
   return {
     cwd,
@@ -193,6 +205,11 @@ function findFirst(cwd: string, candidates: string[]): string | undefined {
   )
 }
 
+/**
+ * Fallback for layouts not in the candidate lists: the shallowest file with the
+ * given name under the source root. Renderer folders are skipped, since a
+ * renderer entry is often called `main.ts` too.
+ */
 function findByName(
   cwd: string,
   root: string,
@@ -217,6 +234,7 @@ function findByName(
           "out",
           ".vite",
           "generated",
+          "renderer",
         ].includes(entry.name)
       ) {
         queue.push(fullPath)
@@ -316,32 +334,44 @@ async function patchPreload(
   return true
 }
 
+/**
+ * Adds an import and a call to it right after the file's last import
+ * declaration, or at the top of the file when it has none.
+ *
+ * The file is parsed rather than scanned line by line, so multi-line imports
+ * and leading comments are handled.
+ */
 function insertImportAndCall(
   source: string,
   name: string,
   importPath: string,
 ): string {
-  const lines = source.split("\n")
-  let insertAt = lines[0]?.startsWith("#!") ? 1 : 0
-
-  while (insertAt < lines.length) {
-    const line = lines[insertAt]
-    if (line.startsWith("import ") || line.trim() === "") {
-      insertAt += 1
-      continue
-    }
-    break
-  }
-
-  lines.splice(
-    insertAt,
-    0,
+  const eol = source.includes("\r\n") ? "\r\n" : "\n"
+  const inserted = [
     `import { ${name} } from "${importPath}"`,
     "",
     `${name}()`,
-    "",
-  )
-  return lines.join("\n")
+  ].join(eol)
+
+  const lastImport = ts
+    .createSourceFile("entry.ts", source, ts.ScriptTarget.Latest)
+    .statements.filter(ts.isImportDeclaration)
+    .at(-1)
+
+  if (!lastImport) {
+    // Keep a shebang on the first line.
+    const start = source.startsWith("#!") ? source.indexOf("\n") + 1 : 0
+    const rest = source.slice(start)
+    return `${source.slice(0, start)}${inserted}${eol}${rest ? eol : ""}${rest}`
+  }
+
+  // Insert after the line the import ends on, keeping any trailing comment.
+  const lineEnd = source.indexOf("\n", lastImport.end)
+  const head = lineEnd === -1 ? source : source.slice(0, lineEnd + 1)
+  const rest =
+    lineEnd === -1 ? "" : source.slice(lineEnd + 1).replace(/^\s*\n/, "")
+  const separator = head.endsWith("\n") ? "" : eol
+  return `${head}${separator}${inserted}${eol}${rest ? eol : ""}${rest}`
 }
 
 function relativeImport(fromDir: string, toFile: string): string {
