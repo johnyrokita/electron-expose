@@ -32,6 +32,11 @@ async function createWindow() {
         "window.api.math.calculate(6, 7, 'multiply')",
       )
       console.log(`E2E calculator answer: ${answer}`)
+
+      const message = await createdWindow.webContents.executeJavaScript(
+        "window.api.math.calculate(1, 0, 'divide').catch((error) => error.message)",
+      )
+      console.log(`E2E error message: [${message}]`)
       app.quit()
     } catch (error) {
       console.error(error)

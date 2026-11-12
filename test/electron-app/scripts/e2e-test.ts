@@ -33,4 +33,12 @@ if (!output.includes("E2E calculator answer: 42")) {
   )
 }
 
+// The renderer must see the thrown message as written, without Electron's
+// "Error invoking remote method" prefix.
+if (!output.includes("E2E error message: [Cannot divide by zero]")) {
+  throw new Error(
+    `Electron e2e did not receive a clean error message\n${output}`,
+  )
+}
+
 console.log("Electron e2e test passed")
