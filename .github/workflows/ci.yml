@@ -34,3 +34,8 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      # Generates the example's bridge and type-checks it against the real
+      # Electron declarations.
+      - name: Typecheck example
+        run: pnpm run test:example

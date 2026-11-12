@@ -13,7 +13,7 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -23,7 +23,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"fs.chmodSync('dist/cli.js', 0o755)\"",
     "check": "pnpm run lint && pnpm run format:check && pnpm run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -51,7 +51,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.12"
   },
   "dependencies": {
     "@clack/prompts": "^1.5.1",
