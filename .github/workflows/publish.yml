@@ -27,8 +27,10 @@ jobs:
       - name: Setup pnpm
         run: corepack enable
 
-      - name: Use latest npm
-        run: npm install --global npm@latest
+      # Trusted publishing needs npm 11.5 or newer. Pinned to 11 because npm 12
+      # does not support the Node version set above.
+      - name: Use npm 11
+        run: npm install --global npm@11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
