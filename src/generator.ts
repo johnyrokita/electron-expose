@@ -8,6 +8,7 @@ import {
   Project,
   SyntaxKind,
   type ClassDeclaration,
+  type JSDocableNode,
   type MethodDeclaration,
   type SourceFile,
   type VariableDeclaration,
@@ -159,7 +160,7 @@ async function generate(options: GenerateOptions): Promise<GenerateResult> {
   if (routes.length === 0) throw new Error(renderNoRoutesMessage(discovery))
 
   const outDir = path.resolve(cwd, config.outDir)
-  const modules = aliasModules(routes)
+  const modules = aliasModules(routes, cwd)
   const files: Array<[file: string, contents: string]> = [
     [path.join(outDir, "main.ts"), renderMain(routes, modules, outDir, config)],
     [path.join(outDir, "preload.ts"), renderPreload(config)],
@@ -217,8 +218,18 @@ async function discoverRoutes(
     skipAddingFilesFromTsConfig: true,
   })
 
-  const routes = routeFiles.flatMap((file) =>
-    scanSourceFile(project.addSourceFileAtPath(file)),
+  // A route needs `exposed(` or `@expose`, so a file without the word cannot
+  // have one. Checking the text first avoids parsing the rest of the tree.
+  // `overwrite` only replaces the in-memory copy; nothing is saved to disk.
+  const texts = await Promise.all(
+    routeFiles.map((file) => fs.readFile(file, "utf8")),
+  )
+  const routes = routeFiles.flatMap((file, index) =>
+    texts[index].includes("expose")
+      ? scanSourceFile(
+          project.createSourceFile(file, texts[index], { overwrite: true }),
+        )
+      : [],
   )
   validateRoutes(routes)
 
@@ -506,14 +517,23 @@ function assertExposableMethod(
   }
 }
 
-/** Returns the JSDoc block closest to a declaration, re-indented to column 0. */
-function readDocs(node: {
-  getJsDocs(): Array<{ getText(): string }>
-}): string | undefined {
-  const text = node.getJsDocs().at(-1)?.getText()
-  if (!text) return undefined
+/**
+ * Returns the JSDoc block directly above a declaration, re-indented to column
+ * 0. A block separated by a blank line is skipped, since that is usually a
+ * file or section comment and not about this route.
+ */
+function readDocs(node: Node & JSDocableNode): string | undefined {
+  const doc = node.getJsDocs().at(-1)
+  if (!doc) return undefined
 
-  return text
+  const gap = node
+    .getSourceFile()
+    .getFullText()
+    .slice(doc.getEnd(), node.getStart())
+  if (/\n\s*\n/.test(gap)) return undefined
+
+  return doc
+    .getText()
     .split("\n")
     .map((line) => line.trim())
     .map((line, index) => (index > 0 ? ` ${line}` : line))
@@ -542,15 +562,40 @@ function validateRoutes(routes: ExposedRoute[]): void {
   }
 }
 
-/** Maps each route source file to the namespace alias generated files import it as. */
-function aliasModules(routes: ExposedRoute[]): Map<string, string> {
-  const sourcePaths = unique(routes.map((route) => route.sourcePath))
-  return new Map(
-    sourcePaths.map((sourcePath, index) => [sourcePath, `m${index}`]),
-  )
+/**
+ * Maps each route source file to the namespace alias generated files import it
+ * as, e.g. `src/main/routes/users.ts` becomes `m_src_main_routes_users`.
+ *
+ * The alias comes from the file's own path, so adding or removing a route file
+ * does not rename the others. That keeps diffs small for projects that commit
+ * generated files.
+ */
+function aliasModules(
+  routes: ExposedRoute[],
+  cwd: string,
+): Map<string, string> {
+  const modules = new Map<string, string>()
+  const taken = new Set<string>()
+
+  for (const sourcePath of unique(routes.map((route) => route.sourcePath))) {
+    const base = `m_${path
+      .relative(cwd, sourcePath)
+      .replace(/\.tsx?$/, "")
+      .replace(/\W/g, "_")}`
+
+    // Two paths can flatten to the same name (`a-b.ts` and `a_b.ts`). `$`
+    // never appears in a flattened name, so the suffix cannot clash either.
+    let alias = base
+    for (let n = 2; taken.has(alias); n++) alias = `${base}$${n}`
+
+    taken.add(alias)
+    modules.set(sourcePath, alias)
+  }
+
+  return modules
 }
 
-/** Type-level reference to a route's function, e.g. `typeof m0.ping`. */
+/** Type-level reference to a route's function, e.g. `typeof m_routes.ping`. */
 function renderTypeRef(route: ExposedRoute, alias: string): string {
   return route.methodName
     ? `${alias}.${route.exportName}["${route.methodName}"]`
@@ -584,7 +629,7 @@ function renderMain(
     let target = `${alias}.${route.exportName}`
 
     if (route.methodName) {
-      const instance = `${alias}${route.exportName}`
+      const instance = `${alias}$${route.exportName}`
       instances.set(instance, `new ${alias}.${route.exportName}()`)
       target = `${instance}.${route.methodName}`
     }

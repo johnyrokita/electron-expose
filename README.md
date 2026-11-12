@@ -65,7 +65,9 @@ bundler inlines the few lines of runtime code, and the generator and its
 dependencies (about 15 MB) stay out of your packaged app.
 
 If your main process runs unbundled, for example plain `tsc` output, install
-it as a regular dependency so the import resolves at runtime.
+it as a regular dependency so the import resolves at runtime. The package is an
+ES module. A CommonJS main process can `require()` it on Electron 35 or newer.
+On older Electron, bundle the main process or run it as an ES module.
 
 Requires Node 20.12 or newer.
 
@@ -222,21 +224,27 @@ The generated `window.api` types point at your functions instead of copying
 their signatures:
 
 ```ts
-import type * as m0 from "../../main/routes/users"
+import type * as m_src_main_routes_users from "../../main/routes/users"
 
 export type ElectronExposeApi = {
   users: {
-    get: Route<typeof m0.getUser>
+    get: Route<typeof m_src_main_routes_users.getUser>
   }
 }
 ```
 
 So the renderer sees what TypeScript sees in the main process. Inferred return
 types, generics, destructured parameters, and types that are not exported all
-work. A doc comment on a route shows up when you hover the `window.api` call.
+work. Go to definition on a `window.api` call lands on the route function. A
+doc comment directly above a route shows up when you hover the call.
 
 Every call returns a `Promise`, including calls to routes that are synchronous
-in the main process.
+in the main process. Two exceptions: a route whose return type is `any` stays
+`any`, and a synchronous generic route has its type parameters replaced by
+their constraints. Async generic routes keep them.
+
+Import names come from each route file's path, so adding a route file only adds
+lines to the generated files. That keeps diffs small if you commit them.
 
 Because the types refer to your route files, the TypeScript project that checks
 your renderer must be able to read them. A single `tsconfig.json` does this
@@ -256,6 +264,10 @@ removed. The main process still logs the original error with its stack.
 Only the message crosses over. Electron drops the error's `name` and any custom
 properties between the preload script and the page, so put anything the
 renderer needs to branch on into the return value.
+
+Errors that Electron raises itself keep Electron's wording. That covers a
+return value that cannot be cloned, and a call made before
+`registerElectronExposeRoutes()` has run.
 
 ## Contributing
 

@@ -53,13 +53,13 @@ describe("generateElectronExpose", () => {
     const main = await read(cwd, "src/generated/electron-expose/main.ts")
     expect(main).toContain('handle("math.calculate"')
     expect(main).toContain(
-      "const m0CalculatorRoutes = new m0.CalculatorRoutes()",
+      "const m_src_main_routes_calculator$CalculatorRoutes = new m_src_main_routes_calculator.CalculatorRoutes()",
     )
 
     const types = await read(cwd, "src/generated/electron-expose/types.ts")
     expect(types).toContain("math: {")
     expect(types).toContain(
-      'calculate: Route<m0.CalculatorRoutes["calculate"]>',
+      'calculate: Route<m_src_main_routes_calculator.CalculatorRoutes["calculate"]>',
     )
     await expect(typecheck(cwd)).resolves.toEqual([])
   })
@@ -91,7 +91,7 @@ describe("generateElectronExpose", () => {
     ).resolves.toContain('handle("system.ping"')
     await expect(
       read(cwd, "src/generated/electron-expose/types.ts"),
-    ).resolves.toContain("ping: Route<typeof m0.ping>")
+    ).resolves.toContain("ping: Route<typeof m_src_main_routes_system.ping>")
     await expect(typecheck(cwd)).resolves.toEqual([])
   })
 
@@ -249,15 +249,68 @@ describe("generateElectronExpose", () => {
         "     * Installs the downloaded update.",
         "     * Quits the app when it finishes.",
         "     */",
-        "    install: Route<typeof m0.install>",
+        "    install: Route<typeof m_src_main_routes_updates.install>",
       ].join("\n"),
     )
     expect(types).toContain(
       [
         "    /** Checks for a new version. */",
-        '    check: Route<m0.UpdateRoutes["check"]>',
+        '    check: Route<m_src_main_routes_updates.UpdateRoutes["check"]>',
       ].join("\n"),
     )
+  })
+
+  it("does not treat a section comment as the first route's docs", async () => {
+    const cwd = await createProject({
+      "src/main/routes/browser.ts": `
+        import { exposed } from "electron-expose"
+
+        /** Everything below controls the embedded browser. */
+
+        export const state = exposed("browser.state", async (): Promise<string> => "idle")
+      `,
+    })
+
+    await generateElectronExpose({ cwd })
+
+    await expect(
+      read(cwd, "src/generated/electron-expose/types.ts"),
+    ).resolves.not.toContain("Everything below")
+  })
+
+  it("keeps existing lines unchanged when a route file is added", async () => {
+    const cwd = await createProject({
+      "src/main/routes/users.ts": `
+        import { exposed } from "electron-expose"
+        export const list = exposed("users.list", async (): Promise<string[]> => [])
+      `,
+    })
+    const generated = [
+      "src/generated/electron-expose/main.ts",
+      "src/generated/electron-expose/types.ts",
+    ]
+
+    await generateElectronExpose({ cwd })
+    const before = await Promise.all(generated.map((file) => read(cwd, file)))
+
+    // Sorts before users.ts, which would shift index-based names.
+    await fs.writeFile(
+      path.join(cwd, "src/main/routes/accounts.ts"),
+      `
+        import { exposed } from "electron-expose"
+        export const list = exposed("accounts.list", async (): Promise<string[]> => [])
+      `,
+      "utf8",
+    )
+    await generateElectronExpose({ cwd })
+    const after = await Promise.all(generated.map((file) => read(cwd, file)))
+
+    for (const [index, contents] of before.entries()) {
+      const added = new Set(after[index].split("\n"))
+      const removed = contents.split("\n").filter((line) => !added.has(line))
+      expect(removed).toEqual([])
+    }
+    await expect(typecheck(cwd)).resolves.toEqual([])
   })
 
   it("supports a global API name that is not an identifier", async () => {
@@ -300,7 +353,7 @@ describe("generateElectronExpose", () => {
     await generateElectronExpose({ cwd })
 
     const types = await read(cwd, "src/generated/electron-expose/types.ts")
-    expect(types).toContain("ok: Route<typeof m0.ok>")
+    expect(types).toContain("ok: Route<typeof m_src_main_routes_ok.ok>")
     expect(types).not.toContain("stale")
   })
 
@@ -476,7 +529,9 @@ describe("watchElectronExpose", () => {
         async () => {
           await expect(
             read(cwd, "src/generated/electron-expose/types.ts"),
-          ).resolves.toContain("added: Route<typeof m0.added>")
+          ).resolves.toContain(
+            "added: Route<typeof m_src_main_routes_added.added>",
+          )
         },
         { timeout: 10_000, interval: 100 },
       )
