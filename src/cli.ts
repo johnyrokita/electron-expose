@@ -8,7 +8,7 @@ import { initElectronExpose } from "./init.js"
 import pc from "picocolors"
 
 const USAGE = `${pc.bold("Usage:")}
-  electron-expose init [--write] [--yes] [--root src] [--config electron-expose.config.ts]
+  electron-expose init [--yes] [--no-interactive] [--tsconfig] [--root src] [--config electron-expose.config.ts]
   electron-expose generate [--watch] [--config electron-expose.config.ts]
   electron-expose list [--config electron-expose.config.ts]`
 

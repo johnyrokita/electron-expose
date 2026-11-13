@@ -12,7 +12,6 @@
     "typecheck": "pnpm run generate && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "electron-expose": "workspace:*",
     "electron-squirrel-startup": "^1.0.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
@@ -27,6 +26,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "electron": "^42.3.3",
+    "electron-expose": "workspace:*",
     "typescript": "^5.9.3",
     "vite": "^7.2.7"
   }
