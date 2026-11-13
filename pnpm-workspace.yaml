@@ -1,3 +1,7 @@
 packages:
   - "."
   - "examples/*"
+
+# Electron Forge requires a hoisted node_modules and checks for it with
+# `pnpm config get node-linker`, which only reports the value set here.
+nodeLinker: hoisted

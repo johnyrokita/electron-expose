@@ -98,7 +98,7 @@ export function defineConfig(
  * Mark an exported class method for exposure to the renderer process.
  *
  * The containing class must be exported and currently needs a zero-argument
- * constructor.
+ * constructor. The method must be a public instance method.
  *
  * When no name is provided, the method name is used as the generated
  * `window.api` key.
@@ -108,7 +108,7 @@ export function expose(): MethodDecorator
  * Mark an exported class method for exposure to the renderer process.
  *
  * The containing class must be exported and currently needs a zero-argument
- * constructor.
+ * constructor. The method must be a public instance method.
  *
  * @param name Dot-separated API key, such as `"system.getVersion"`.
  */
@@ -117,7 +117,7 @@ export function expose(name: string): MethodDecorator
  * Mark an exported class method for exposure to the renderer process.
  *
  * The containing class must be exported and currently needs a zero-argument
- * constructor.
+ * constructor. The method must be a public instance method.
  */
 export function expose(options: ExposeOptions): MethodDecorator
 export function expose(

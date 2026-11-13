@@ -126,6 +126,15 @@ For CI or setup scripts:
 pnpm electron-expose init --yes
 ```
 
+`init` flags:
+
+- `--yes`, `-y` or `--write`: skip the prompts, patch the detected main/preload
+  files, and enable `experimentalDecorators`.
+- `--no-interactive`: skip the prompts and only create the config file.
+- `--tsconfig`: with `--no-interactive`, also enable `experimentalDecorators`.
+- `--root <dir>`: the source folder to scan, instead of the detected one.
+- `--config <path>`: where to write the config file.
+
 ## Plumb It In
 
 Main process:
