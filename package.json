@@ -1,6 +1,6 @@
 {
   "name": "electron-expose",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Generate type-safe Electron IPC bridges from TypeScript decorators.",
   "type": "module",
   "main": "./dist/index.js",
